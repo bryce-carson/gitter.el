@@ -99,6 +99,8 @@ URL `https://developer.gitter.im/docs/streaming-api'.")
 ;; (defvar gitter--user-rooms nil
 ;;   "JSON object of requesing user rooms API.")
 
+(defvar gitter--known-users nil)
+
 (defvar gitter--markup-text-functions '(string-trim
                                         gitter--markup-fenced-code)
   "A list of functions to markup text. They will be called in order.
@@ -228,6 +230,11 @@ Optionally, HEADERS and DATA are used in the command."
               ;; `gitter--read-response' moves point
               (let* ((response (gitter--read-response)))
                 (let-alist response
+                  (unless (alist-get .fromUser.username gitter--known-users nil nil 'string=)
+                    (push (cons .fromUser.username
+                                (url-copy-file .fromUser.avatarUrlSmall
+                                               (concat (temporary-file-directory) .fromUser.username ".png")))
+                          gitter--known-users))
                   (with-current-buffer results-buf
                     (save-excursion
                       (save-restriction
@@ -238,6 +245,12 @@ Optionally, HEADERS and DATA are used in the command."
                                             .fromUser.username)))
                             ;; Delete one newline
                             (delete-char -1)
+                          (insert-image
+                           (create-image (concat (temporary-file-directory) .fromUser.username ".png")
+                                         'png
+                                         nil
+                                         :height (+ (line-pixel-height) 5)))
+                          (forward-char)
                           (insert (funcall gitter--prompt-function response)))
                         (insert
                          (let ((text .text))
@@ -261,7 +274,7 @@ Optionally, HEADERS and DATA are used in the command."
 and display name of a messager, consuming that information from\
 RESPONSE."
   (let-alist response
-    (concat (propertize (format "──────────[ %s @%s"
+    (concat (propertize (format " %s @%s"
                                 .fromUser.displayName
                                 .fromUser.username)
                         'face 'font-lock-comment-face)
