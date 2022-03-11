@@ -1,11 +1,11 @@
-;;; gitter.el --- An Emacs Gitter client  -*- lexical-binding: t; -*-
+;;; gitter.el --- Spacemacs Gitter client  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2016  Chunyang Xu
 
 ;; Author: Chunyang Xu <mail@xuchunyang.me>
 ;; URL: https://github.com/xuchunyang/gitter.el
 ;; Package-Requires: ((emacs "24.4") (let-alist "1.0.4"))
-;; Keywords: Gitter, chat, client, Internet
+;; Keywords: Gitter, chat, client, Internet, comm
 ;; Version: 1
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -93,10 +93,11 @@ URL `https://developer.gitter.im/docs/streaming-api'.")
   "The prompt that you will compose your message after.")
 
 (defvar gitter--prompt-function #'gitter--default-prompt
-  "function called with message JSON object to return a prompt for chatting logs.")
+  "Function called with message JSON object to return a prompt for chatting logs.")
 
-(defvar gitter--user-rooms nil
-  "JSON object of requesing user rooms API.")
+;; FIXME: remove if fixed with change to main function: `gitter'
+;; (defvar gitter--user-rooms nil
+;;   "JSON object of requesing user rooms API.")
 
 (defvar gitter--markup-text-functions '(string-trim
                                         gitter--markup-fenced-code)
@@ -110,8 +111,10 @@ current buffer.")
 
 ;;; Utility
 
+;; NOTE: is this macro necessary? Was `message' used correctly? Concatenating
+;; "[Gitter]" onto the FORMAT-STRING seems a little strange, but okay.
 (defmacro gitter--debug (format-string &rest args)
-  "When `gitter--debug', print debug information almost like `message'."
+  "When `gitter--debug' is non-nil, this macro will message the user ARGS, with FORMAT-STRING prepended by \"[Gitter] \"."
   `(when gitter--debug
      (message ,(concat "[Gitter] " format-string) ,@args)))
 
@@ -131,7 +134,7 @@ If PARAMS or DATA is provided, it should be alist."
       (if (zerop (apply #'call-process gitter-curl-program-name nil t nil args))
           (progn (goto-char (point-min))
                  (gitter--read-response))
-        (error "curl failed")
+        (error "Failed curl usage")
         (display-buffer (current-buffer))))))
 
 (defun gitter--url-encode-params (params)
@@ -144,7 +147,10 @@ PARAMS is an alist."
                (url-hexify-string val))))
    params "&"))
 
+;; NOTE: Why?
 (defun gitter--curl-args (url method &optional headers data)
+  "Generate the `curl' command–line, consuming URL and using METHOD.\
+Optionally, HEADERS and DATA are used in the command."
   "Return curl command line options/arguments as a list."
   (let ((args ()))
     (push "-s" args)
@@ -169,6 +175,7 @@ PARAMS is an alist."
     (json-read)))
 
 (defun gitter--open-room (name id)
+  "Opens room NAME that has ID in a Gitter minor-mode buffer."
   (with-current-buffer (get-buffer-create (concat "#" name))
     (unless (process-live-p (get-buffer-process (current-buffer)))
       (gitter-minor-mode 1)
@@ -202,6 +209,7 @@ PARAMS is an alist."
     (switch-to-buffer (current-buffer))))
 
 (defun gitter--output-filter (process output)
+  "Filters the OUTPUT from PROCESS."
   (when gitter--debug
     (with-current-buffer (get-buffer-create "*gitter log*")
       (goto-char (point-max))
@@ -241,7 +249,7 @@ PARAMS is an alist."
                         (setq gitter--last-message response))))))
               (delete-region (point-min) (point)))
           (error
-           ;; FIXME
+           ;; FIXME: The error was: `(json-end-of-file)'
            (with-current-buffer (get-buffer-create "*Debug Gitter Log")
              (goto-char (point-max))
              (insert (format "The error was: %s" err)
@@ -249,7 +257,9 @@ PARAMS is an alist."
                      output))))))))
 
 (defun gitter--default-prompt (response)
-  "Default function to make prompt by using the JSON object MESSAGE."
+  "Create the header for a message by concatenating the username\
+and display name of a messager, consuming that information from\
+RESPONSE."
   (let-alist response
     (concat (propertize (format "──────────[ %s @%s"
                                 .fromUser.displayName
@@ -274,7 +284,7 @@ PARAMS is an alist."
 ;;     (buffer-substring 3 (point-max))))
 
 (defun gitter--fontify-code (code mode)
-  "Fontify CODE in major-mode MODE."
+  "Fontify CODE in \"major-mode\" MODE."
   (with-temp-buffer
     (insert code)
     (delay-mode-hooks (funcall mode))
@@ -285,7 +295,7 @@ PARAMS is an alist."
     (buffer-string)))
 
 (defun gitter--markup-fenced-code (text)
-  "Markup Github-flavored fenced code block.
+  "Fontify TEXT that is a Github-flavored fenced code block.
 
 For reference, see URL
 `https://help.github.com/articles/creating-and-highlighting-code-blocks/'."
@@ -356,10 +366,16 @@ learning how to make commandsnon-interactive."
         (user-error "`gitter-token' is not set.  \
 Please put this line in your ~/.authinfo or ~/.authinfo.gpg
 machine gitter.im password here-is-your-token"))))
-  (unless gitter--user-rooms
-    (setq gitter--user-rooms (gitter--request "GET" "/v1/rooms")))
+  ;; FIXME: Once the variable has been set, you cannot get more. It may be interesting to fix this with a `let' instead of a variable, since the value of the variable is *only* consumed in this function, and is always set here if it does not exist, and is never reset otherwise.
+  ;; (unless gitter--user-rooms
+  ;;   (setq gitter--user-rooms (gitter--request "GET" "/v1/rooms")))
   ;; FIXME Assuming room name is unique because of `completing-read'
-  (let* ((rooms (mapcar (lambda (alist)
+  ;; FIXME: "Said Ozcan" appears as a room/chat; but I've never chatted with them and have not joined the room or been invited to join the room.
+  ;; FIXME: `Gitter/developers' does not appear in the room list after joining in the web client and running `M-x gitter' again.
+  ;; NOTE: Restart Emacs to be able to update the room list.
+  ;; NOTE: `Said Ozcan' remains in the room list, and no other user, after restarting Emacs. There is some sort of "state" affecting this appearance.
+  (let* ((gitter--user-rooms (gitter--request "GET" "/v1/rooms"))
+         (rooms (mapcar (lambda (alist)
                           (let-alist alist
                             (cons .name .id)))
                         gitter--user-rooms))
