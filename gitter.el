@@ -59,6 +59,11 @@ When you save this variable, DON'T WRITE IT ANYWHERE PUBLIC."
   :group 'gitter
   :type 'string)
 
+(defcustom gitter-show-room-descriptions t
+  "When non-nil, show room descriptions in completion buffers."
+  :group 'gitter
+  :type 'boolean)
+
 
 ;;; Variable
 
@@ -123,6 +128,22 @@ current buffer.")
 
 
 ;;; Utility
+
+(defun gitter--room-description-short (DESCRIPTION)
+  "Returns the first eight words of the DESCRIPTION of a room."
+  
+  (let* ((string "I am a Gitter room description: here are some things about the room. This description is much longer than ten words.")
+	 (regExp (rx (group (** 0 7 (+ word) (or
+					      (group ascii space) space)))
+		     (group (zero-or-one (+ word)))))
+	 (shortDescription
+	  (cdddr (when (string-match regExp string)
+     		   (list :regExp regExp
+	   		 :match (list (match-string 1 string)
+				      (match-string 3 string)))))))
+    (concat (car (car shortDescription))
+	    (car (cdr (car shortDescription)))
+	    "…")))
 
 (defmacro gitter--debug (format-string &rest args)
   "When `gitter--debug', print debug information almost like `message'."
@@ -483,7 +504,9 @@ machine gitter.im password here-is-your-token"))))
                                                                    (rassoc c r))
                                                                  gitter--user-rooms))
                                                  (unread   (alist-get 'unreadItems room))
-                                                 (mentions (alist-get 'mentions room)))
+                                                 (mentions (alist-get 'mentions room))
+						 (description (alist-get 'description room))
+						 (shortDescription (gitter--room-description-short description)))
                                             (concat (when (/= unread 0)
                                                       (propertize
                                                        (format " unread: %s" unread)
@@ -491,7 +514,11 @@ machine gitter.im password here-is-your-token"))))
                                                      (when (/= mentions 0)
                                                        (propertize
                                                        (format " mentions %s" mentions)
-                                                       'face 'warning)))))))
+                                                       'face 'warning))
+						     (when gitter-show-room-descriptions
+						       (propertize
+							(format " %s" shortDescription)
+							'face 'succecss)))))))
          (name (completing-read "Open room: " rooms nil t))
          (id (cdr (assoc name rooms))))
     (unless (file-directory-p gitter--avatar-dir)
