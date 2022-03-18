@@ -59,6 +59,26 @@ When you save this variable, DON'T WRITE IT ANYWHERE PUBLIC."
   :group 'gitter
   :type 'string)
 
+(defcustom gitter-room-unread-display t
+  "When non-nil, show count of unread messages in completion buffers."
+  :group 'gitter
+  :type 'boolean)
+
+(defcustom gitter-room-unread-face 'success
+  "The face to use for unread messages in completion buffers."
+  :group 'gitter
+  :type 'face)
+
+(defcustom gitter-room-mentions-display t
+  "When non-nil, show count of mentions in completion buffers."
+  :group 'gitter
+  :type 'boolean)
+
+(defcustom gitter-room-mentions-face 'warning
+  "The face to use for mentions in completion buffers."
+  :group 'gitter
+  :type 'face)
+
 (defcustom gitter-room-topic-display t
   "When non-nil, show room topics in completion buffers."
   :group 'gitter
@@ -561,14 +581,14 @@ machine gitter.im password here-is-your-token"))))
                                                  (unread   (alist-get 'unreadItems room))
                                                  (mentions (alist-get 'mentions room))
 						                                     (shortTopic (gitter--room-topic-short (alist-get 'topic room))))
-                                            (concat (when (/= unread 0)
+                                            (concat (when (and gitter-room-unread-display (/= unread 0))
                                                       (propertize
                                                        (format " unread: %s" unread)
-                                                       'face 'success))
-                                                    (when (/= mentions 0)
+                                                       'face 'gitter-room-unread-face))
+                                                    (when (and gitter-room-mentions-display (/= mentions 0))
                                                       (propertize
                                                        (format " mentions %s" mentions)
-                                                       'face 'warning))
+                                                       'face 'gitter-room-mentions-face))
 						                                        (when gitter-room-topic-display
 						                                          (propertize
 						                                           (format " %s" shortTopic)
