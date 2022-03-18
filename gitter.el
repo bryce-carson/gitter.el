@@ -59,6 +59,37 @@ When you save this variable, DON'T WRITE IT ANYWHERE PUBLIC."
   :group 'gitter
   :type 'string)
 
+(defcustom gitter-room-topic-display t
+  "When non-nil, show room topics in completion buffers."
+  :group 'gitter
+  :type 'boolean)
+
+(defconst gitter--room-topic-regular-expression
+  (rx (group (one-or-more (not space))))
+  "The default room topic regular expression")
+
+(defcustom gitter-room-topic-regexp gitter--room-topic-regular-expression
+  "Regular expression controlling display of room topic.
+
+The regular expression supplied is used exactly as is, without
+concern for selecting groups as can be done with `match-string',
+and is done when the regular expression has not been customized.
+
+The length of the room topic is controlled by
+`gitter-room-topic-length'."
+  :group 'gitter
+  :type 'regexp)
+
+(defcustom gitter-room-topic-length 8
+  "The number of 'words' to include in the room topic."
+  :group 'gitter
+  :type 'integer)
+
+(defcustom gitter-room-topic-face 'success
+  "The face to use for the room topic in completion buffers."
+  :group 'gitter
+  :type 'face)
+
 
 ;;; Variable
 
@@ -123,6 +154,51 @@ current buffer.")
 
 
 ;;; Utility
+
+(defun gitter--room-topic-short (TOPIC)
+  "Return, by default, the first eight `words` of the TOPIC of a room.
+
+'Words' are sequences of characters surrounded by spaces (ASCII
+20); this was chosen as the default so that a URL or other
+non-`word` characters that may be present are not discounted. The
+below example shows a room topic as it may be displayed in the
+completion buffer.
+
+Customize the gitter-room-topic-regexp variable to change what is
+displayed from the TOPIC of a room.
+
+Customize the gitter-room-topic-face variable to change how the
+room topic is displayed."
+
+(let* ((regularExpression gitter-room-topic-regexp)
+       (topicSubstringLength gitter-room-topic-length)
+	     topicSubstrings
+       topicShort)
+  (progn
+    (while (<= (length topicSubstrings) (1- topicSubstringLength))
+
+	    ;; Unless this is the first search…
+	    (unless
+
+	        ;; …which is known by a topicSubstrings length of zero…
+	        (unless (>= (length topicSubstrings) 1)
+	          (string-match regularExpression TOPIC)
+	          (setq topicSubstrings (append topicSubstrings (list (match-string 0 TOPIC)))))
+	      
+	      ;; …perform the search again, beginning from the position
+	      ;; after the last match…
+	      (string-match regularExpression TOPIC (match-end 0))
+	      (setq topicSubstrings (append topicSubstrings (list (match-string 0 TOPIC))))))
+    
+    ;; … then make a string using the list of topicSubstrings…
+    (setq topicShort (string-join topicSubstrings " "))
+
+    ;; …if the short topic string is the same, do not append the horizontal ellipsis, and
+    (unless (string= topicShort TOPIC)
+      (setq topicShort (concat topicShort "…")))
+
+    ;; Return the display form of the room topic.
+    topicShort)))
 
 (defmacro gitter--debug (format-string &rest args)
   "When `gitter--debug', print debug information almost like `message'."
@@ -483,15 +559,20 @@ machine gitter.im password here-is-your-token"))))
                                                                    (rassoc c r))
                                                                  gitter--user-rooms))
                                                  (unread   (alist-get 'unreadItems room))
-                                                 (mentions (alist-get 'mentions room)))
+                                                 (mentions (alist-get 'mentions room))
+						                                     (shortTopic (gitter--room-topic-short (alist-get 'topic room))))
                                             (concat (when (/= unread 0)
                                                       (propertize
                                                        (format " unread: %s" unread)
                                                        'face 'success))
-                                                     (when (/= mentions 0)
-                                                       (propertize
+                                                    (when (/= mentions 0)
+                                                      (propertize
                                                        (format " mentions %s" mentions)
-                                                       'face 'warning)))))))
+                                                       'face 'warning))
+						                                        (when gitter-room-topic-display
+						                                          (propertize
+						                                           (format " %s" shortTopic)
+						                                           'face 'gitter-room-topic-face)))))))
          (name (completing-read "Open room: " rooms nil t))
          (id (cdr (assoc name rooms))))
     (unless (file-directory-p gitter--avatar-dir)
